@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SaiSUPPORT-Alnukhba.IT.SLO - Website Status Checker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #121212;
+      color: #fff;
+      padding: 20px;
+    }
+    h1, h2, h3 {
+      color: #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background: #222;
+    }
+    .online {
+      background-color: #2e7d32;
+      color: #fff;
+    }
+    .offline {
+      background-color: #b71c1c;
+      color: #fff;
+    }
+    .countdown {
+      font-size: 16px;
+      margin: 10px 0;
+    }
+
+    .charts-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: flex-start;
+    }
+    .chart-container {
+      flex: 1 1 calc(33.33% - 20px);
+      background: #1e1e1e;
+      padding: 10px;
+      border: 1px solid #444;
+      min-width: 250px;
+      max-width: 33.33%;
+    }
+    canvas {
+      width: 100% !important;
+      height: 200px !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>SaiSUPPORT-Alnukhba.IT.SLO - Website Status Checker</h1>
+
+  <div class="countdown" id="countdown">Refreshing in 15 seconds...</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Website Name</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Latency (ms)</th>
+      </tr>
+    </thead>
+    <tbody id="statusTable"></tbody>
+  </table>
+
+  <h2>Latency Charts</h2>
+  <div class="charts-grid" id="chartsContainer"></div>
+
+  <h2>Offline Log</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Website</th>
+        <th>Time Went Offline</th>
+      </tr>
+    </thead>
+    <tbody id="offlineLog"></tbody>
+  </table>
+
+  <script>
+    const sites = {
+      google: "https://www.google.com",
+      instagram: "https://www.instagram.com",
+      facebook: "https://www.facebook.com",
+      microsoft: "https://www.microsoft.com",
+      telegram: "https://web.telegram.org",
+      x: "https://www.x.com",
+      vodu: "https://movie.vodu.me",
+      tiktok: "https://www.tiktok.com/explore"
+    };
+
+    const statusTable = document.getElementById("statusTable");
+    const chartsContainer = document.getElementById("chartsContainer");
+    const offlineLogTable = document.getElementById("offlineLog");
+    const countdownEl = document.getElementById("countdown");
+
+    let countdown = 15;
+    let latencyHistory = {};
+    let chartObjects = {};
+
+    function initializeCharts() {
+      for (const name in sites) {
+        latencyHistory[name] = [];
+
+        const container = document.createElement("div");
+        container.className = "chart-container";
+
+        const title = document.createElement("h3");
+        title.textContent = name.toUpperCase();
+        container.appendChild(title);
+
+        const canvas = document.createElement("canvas");
+        canvas.id = `chart-${name}`;
+        container.appendChild(canvas);
+
+        chartsContainer.appendChild(container);
+
+        chartObjects[name] = new Chart(canvas.getContext("2d"), {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [{
+              label: "Latency (ms)",
+              data: [],
+              borderColor: "#4fc3f7",
+              backgroundColor: "rgba(79,195,247,0.2)",
+              fill: true
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      }
+    }
+
+    function updateChart(name, latency) {
+      const chart = chartObjects[name];
+      const now = new Date().toLocaleTimeString();
+      const history = latencyHistory[name];
+
+      if (history.length >= 10) {
+        history.shift();
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+
+      history.push(latency);
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(latency);
+      chart.update();
+    }
+
+    function updateOfflineLog(name) {
+      const logs = JSON.parse(localStorage.getItem("offlineLog") || "[]");
+      const now = new Date().toLocaleString();
+      logs.push({ name, time: now });
+      localStorage.setItem("offlineLog", JSON.stringify(logs));
+      localStorage.setItem("offlineLogDate", new Date().toISOString());
+      renderOfflineLog();
+    }
+
+    function clearOfflineLogIfExpired() {
+      const savedDate = localStorage.getItem("offlineLogDate");
+      if (savedDate) {
+        const saved = new Date(savedDate);
+        const now = new Date();
+        const diffDays = Math.floor((now - saved) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 3) {
+          localStorage.removeItem("offlineLog");
+          localStorage.removeItem("offlineLogDate");
+        }
+      }
+    }
+
+    function renderOfflineLog() {
+      const logs = JSON.parse(localStorage.getItem("offlineLog") || "[]");
+      offlineLogTable.innerHTML = "";
+      logs.forEach(log => {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${log.name}</td><td>${log.time}</td>`;
+        offlineLogTable.appendChild(row);
+      });
+    }
+
+    function updateRow(name, url, status, latency) {
+      let row = document.getElementById(name);
+      if (!row) {
+        row = document.createElement("tr");
+        row.id = name;
+        statusTable.appendChild(row);
+      }
+
+      row.className = status === "Online" ? "online" : "offline";
+      row.innerHTML = `
+        <td>${name.toUpperCase()}</td>
+        <td><a href="${url}" target="_blank">${url}</a></td>
+        <td>${status}</td>
+        <td>${latency}</td>
+      `;
+    }
+
+    function fetchWithTimeout(url, timeout = 8000) {
+      const controller = new AbortController();
+      const signal = controller.signal;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Timeout"));
+        }, timeout);
+
+        fetch(url, { mode: 'no-cors', signal })
+          .then(resolve)
+          .catch(reject)
+          .finally(() => clearTimeout(timer));
+      });
+    }
+
+    function checkSites() {
+      for (const [name, url] of Object.entries(sites)) {
+        const start = performance.now();
+        fetchWithTimeout(url, 8000)
+          .then(() => {
+            const latency = Math.round(performance.now() - start);
+            updateRow(name, url, "Online", latency);
+            updateChart(name, latency);
+          })
+          .catch(() => {
+            updateRow(name, url, "Offline", "N/A");
+            updateChart(name, 0);
+            updateOfflineLog(name);
+          });
+      }
+    }
+
+    // Initialization
+    clearOfflineLogIfExpired();
+    initializeCharts();
+    renderOfflineLog();
+    checkSites();
+
+    setInterval(() => {
+      checkSites();
+    }, 15000);
+
+    setInterval(() => {
+      countdown--;
+      if (countdown <= 0) countdown = 15;
+      countdownEl.textContent = `Refreshing in ${countdown} seconds...`;
+    }, 1000);
+  </script>
+</body>
+</html>
